@@ -1,7 +1,7 @@
-# FlashMD — Format Specification v0.1
+# FlashMD — Format Specification v0.2
 
 > Part of the **LearnSpec** suite  
-> Status: Draft — May 10, 2026
+> Status: Draft — May 28, 2026
 
 ---
 
@@ -29,7 +29,7 @@ FlashMD may reference visual resources via `!ref` + `media:slug`, but imports no
 |---|---|---|
 | 0 | ` ```flash ` fenced block with front/back | Minimal cards, readable everywhere |
 | 1 | YAML frontmatter | File metadata, language, spaced repetition settings |
-| 2 | Per-card fields, MediaMD references | Per-card tags, images |
+| 2 | Per-card fields, MediaMD references, front variants | Per-card tags, images, alternative phrasings |
 
 Each level is a strict superset of the previous one.
 
@@ -51,6 +51,7 @@ Each level is a strict superset of the previous one.
 - `---`: front/back separator — appears exactly once per block
 - Both sides support **inline Markdown** (bold, italic, `code`, links) and **inline LaTeX** (`$...$`) and **block LaTeX** (`$$...$$`)
 - Both sides may be multi-line
+- The front may declare multiple variants — see [Front Variants (Level 2)](#front-variants-level-2)
 
 ### Minimal Example
 
@@ -123,6 +124,59 @@ Optional attributes may be added on the opening line of the block, after the `id
 
 ---
 
+## Front Variants (Level 2)
+
+A single card may declare **multiple front phrasings** sharing the same back. The player picks one at presentation time.
+
+### Rationale
+
+In classical spaced-repetition, a learner ends up recognising the *surface form* of a card rather than recalling the underlying concept (cue-dependency). Front variants break that surface memorisation: the concept is constant, the prompt is not. The FSRS scheduler still operates on a **single entry per `id`** — variants are alternative presentations of the same mnemonic object, not separate cards.
+
+### Syntax
+
+Front variants are separated by a line of **three or more equal signs** (`={3,}`) on its own line. The front/back separator (`---`) remains unique and marks the boundary between the last variant and the shared back.
+
+````
+```flash id:photosynthesis
+What is photosynthesis?
+===
+How do plants convert sunlight into chemical energy?
+===
+Define photosynthesis.
+---
+The process by which plants convert sunlight into chemical energy, using $CO_2$ and $H_2O$.
+```
+````
+
+- A card may declare **1 or more** front variants (a card with no `===` is a single-variant card — fully backwards-compatible with v0.1).
+- Each variant supports the same inline Markdown and LaTeX as a regular front.
+- Each variant may be multi-line.
+- All variants share the **same back**, the same `id`, the same `tags`, the same `hint`, and the same FSRS state.
+
+### Graceful Degradation
+
+In a standard Markdown reader, a line of `===` under a text line renders as a setext H1 heading. The variants remain readable in plain order; the visual artefact is acceptable for fallback rendering.
+
+### Player Behaviour
+
+| Aspect | Specification |
+|---|---|
+| Tirage | The player SHOULD rotate through variants to ensure coverage over time rather than picking purely at random (e.g. round-robin with per-user memory of seen variants). |
+| FSRS rating | Ratings are recorded against the card `id`, not the variant. A rating reflects the recall of the concept, with variant-induced noise treated as desirable difficulty (Bjork). |
+| Hint | The `hint` attribute, if present, applies to all variants. |
+| Reproducibility | The player MAY persist the variant index per session to allow a learner to re-read a card in the form they just saw. |
+
+### Validation Rules (additional)
+
+| Condition | Level |
+|---|---|
+| Card with `===` but no front before the first separator | Error |
+| Empty variant (whitespace only between two `===` or between `===` and `---`) | Error |
+| Duplicate variants within a card (after Markdown normalisation) | Warning |
+| `===` appearing after the `---` separator | Error |
+
+---
+
 ## Images in Cards (Level 2)
 
 Images are referenced within card content via the standard `media:slug` syntax, with a fallback URL:
@@ -168,6 +222,10 @@ $$6CO_2 + 6H_2O + \text{light} \rightarrow C_6H_{12}O_6 + 6O_2$$
 
 ```flash id:mitosis-phases tags:[cell-division]
 What are the 4 phases of mitosis?
+===
+List the phases of mitosis, in order.
+===
+Mitosis proceeds through four stages — which ones?
 ---
 **Prophase** → **Metaphase** → **Anaphase** → **Telophase**
 ```
@@ -248,6 +306,7 @@ What are the 4 nitrogenous bases of DNA?
 | Empty front | Error |
 | Empty back | Error |
 | `media:slug` without a matching `!ref` | Warning |
+| Variant-specific rules | See [Front Variants — Validation Rules](#validation-rules-additional) |
 
 ### Strict Mode (`--strict`)
 
