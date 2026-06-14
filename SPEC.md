@@ -1,7 +1,7 @@
-# FlashMD — Format Specification v0.2
+# FlashMD — Format Specification v0.3
 
 > Part of the **LearnSpec** suite  
-> Status: Draft — May 28, 2026
+> Status: Draft — June 14, 2026
 
 ---
 
@@ -11,7 +11,7 @@ FlashMD is the **flashcard format** of the LearnSpec suite. It enables the creat
 
 FlashMD is a **review format**: it is consumed in a context separate from the lesson (review session, notification, flashcard mode), never embedded inline within a LearnMD. TrackMD orchestrates the relationship between a LearnMD and its associated FlashMD files.
 
-FlashMD may reference visual resources via `!ref` + `media:slug`, but imports no other LearnSpec format.
+FlashMD may reference visual resources via `!ref` + `media:slug`, and may point a card back to the lesson that explains it via the `lesson:` reference (v0.3), but imports no other LearnSpec format.
 
 | Principle | Description |
 |---|---|
@@ -29,7 +29,7 @@ FlashMD may reference visual resources via `!ref` + `media:slug`, but imports no
 |---|---|---|
 | 0 | ` ```flash ` fenced block with front/back | Minimal cards, readable everywhere |
 | 1 | YAML frontmatter | File metadata, language, spaced repetition settings |
-| 2 | Per-card fields, MediaMD references, front variants | Per-card tags, images, alternative phrasings |
+| 2 | Per-card fields, MediaMD references, front variants, lesson references | Per-card tags, images, alternative phrasings, links back to the source lesson |
 
 Each level is a strict superset of the previous one.
 
@@ -95,6 +95,7 @@ spec_version: "0.1"                    # optional
 author: Jane Smith                     # optional
 tags: [biology, cell, high-school]     # optional — file-level tags
 new_per_day: 20                        # optional — new cards per day (player default)
+lesson: ./01-fondations.learn.md       # optional — default source lesson for cards (v0.3)
 created: 2026-05-10                    # optional — ISO 8601
 updated: 2026-05-10                    # optional — ISO 8601
 ---
@@ -105,6 +106,7 @@ updated: 2026-05-10                    # optional — ISO 8601
 | Field | Status | Type | Description |
 |---|---|---|---|
 | `new_per_day` | Optional | integer | Number of new cards to introduce per day in spaced repetition. Indicative — the player may ignore or override it. |
+| `lesson` | Optional | string | Deck-level default lesson reference (v0.3). A relative path to a `.learn.md` file, optionally with a `#section` anchor. Cards inherit it; see [Lesson References](#lesson-references-level-2). |
 
 ---
 
@@ -121,6 +123,89 @@ Optional attributes may be added on the opening line of the block, after the `id
 | `id` | **Required** | string | Unique identifier within the file. |
 | `tags` | Optional | string[] | Card-specific tags. Added to the file-level tags from frontmatter. |
 | `hint` | Optional | string | Hint displayed on demand before flipping the card. |
+| `lesson` | Optional | string | Reference to the lesson section that explains this card (v0.3). See [Lesson References](#lesson-references-level-2). |
+
+---
+
+## Lesson References (Level 2)
+
+A card may point back to the **lesson that explains it**, so a learner can jump from a card to the underlying course — typically once the answer has been revealed. The reference uses **hyperlink-style resolution**: the same mental model as an HTML/Markdown link.
+
+### Deck-level default + per-card override
+
+Set a default lesson once in the frontmatter, then let each card override it or pin a section:
+
+| `lesson:` value | Resolves to | Like an HTML link… |
+|---|---|---|
+| *(absent)* | The deck-level default lesson, at its top | implicit link |
+| `#section-anchor` | The **deck default lesson**, at that section | `<a href="#frag">` |
+| `./other.learn.md` | **Another lesson**, at its top | `<a href="page.html">` |
+| `./other.learn.md#anchor` | Another lesson, at that section | `<a href="page.html#frag">` |
+
+The reference value is a relative path to a `.learn.md` file, optionally suffixed with `#<anchor>`. The anchor identifies a section of the target lesson: it resolves against a LearnMD heading slug or an explicit `!checkpoint` id. The value carries its own path, so **no `!ref` declaration is required** (unlike `media:slug`, whose slug is opaque).
+
+### One lesson = one deck (common case)
+
+````markdown
+---
+title: "Git — Fondations · Flashcards"
+lang: fr
+lesson: ./01-fondations.learn.md   # written once
+---
+
+# Git — Fondations
+
+```flash id:index-role lesson:#role-de-lindex
+À quoi sert la zone d'index (staging) ?
+---
+La zone de préparation du prochain commit.
+```
+
+```flash id:commit-def
+Qu'est-ce qu'un commit ?
+---
+Un instantané versionné de l'arbre de travail.
+```
+````
+
+The first card points at a **section** of the default lesson; the second, with no `lesson:`, links to the **top** of the same lesson.
+
+### N lessons = one deck (cross-cutting deck)
+
+````markdown
+---
+title: "Git — Révision générale · Flashcards"
+lang: fr
+# no deck-level `lesson:` — each card names its own source
+---
+
+```flash id:index-role lesson:./01-fondations.learn.md#role-de-lindex
+À quoi sert la zone d'index ?
+---
+La zone de préparation du prochain commit.
+```
+
+```flash id:rebase lesson:./04-branches.learn.md#rebase
+Différence entre rebase et merge ?
+---
+Rebase réécrit l'historique ; merge crée un commit de fusion.
+```
+````
+
+Same attribute, same grammar — only the frontmatter default disappears. A deck may also **mix** a default with a few cards that point elsewhere.
+
+### Graceful Degradation
+
+In a standard Markdown reader, `lesson:` is plain text on the opening fence line of the card, like `id:` or `tags:` — readable and unobtrusive.
+
+### Player Behaviour
+
+| Aspect | Specification |
+|---|---|
+| Affordance | The player SHOULD surface the reference as a "back to the lesson" link, typically **after the answer is revealed**. |
+| Track context | When the target lesson belongs to a track, the player SHOULD open it **within that track's context** (so prev/next and progress stay intact), falling back to the standalone lesson view otherwise. |
+| Navigation | The player MAY navigate in place (same view) rather than a new tab; if it does, it SHOULD make returning to the review session obvious and preserve the learner's place in the queue. |
+| Anchor resolution | The `#anchor` SHOULD resolve to a stable identifier first (a LearnMD `!checkpoint` id or an explicit heading anchor) and fall back to the heading slug. |
 
 ---
 
@@ -269,6 +354,7 @@ What are the 4 nitrogenous bases of DNA?
 | Field | Status | Description |
 |---|---|---|
 | `new_per_day` | Optional | New cards per day (spaced repetition) |
+| `lesson` | Optional | Deck-level default lesson reference (`.learn.md` path, optional `#anchor`) — v0.3 |
 
 ### Block Attributes
 
@@ -277,6 +363,7 @@ What are the 4 nitrogenous bases of DNA?
 | `id` | **Required** | Unique slug within the file |
 | `tags` | Optional | Card-specific tags |
 | `hint` | Optional | Hint displayed on demand |
+| `lesson` | Optional | Lesson reference for this card — `#anchor`, `path.learn.md`, or `path.learn.md#anchor` (v0.3) |
 
 ---
 
@@ -286,6 +373,7 @@ What are the 4 nitrogenous bases of DNA?
 |---|---|
 | `!ref ./media.media.md` | ✅ — for images within cards |
 | `!ref ./glossary.glossary.md` | ✅ — for term highlighting |
+| `lesson:` reference to a `.learn.md` section | ✅ — navigation only; resolves a path, declares no dependency (v0.3) |
 | `!import` | ❌ — FlashMD imports no other format |
 | Imported by TrackMD via `!import` | ✅ |
 | Imported by LearnMD via `!import` | ❌ — flashcards are a separate review mode |
@@ -306,6 +394,9 @@ What are the 4 nitrogenous bases of DNA?
 | Empty front | Error |
 | Empty back | Error |
 | `media:slug` without a matching `!ref` | Warning |
+| `lesson:` value whose path does not end in `.learn.md` | Error |
+| Card `lesson:#anchor` (anchor-only) with no file-level `lesson:` default to resolve it | Error |
+| `lesson:` anchor not found in the target lesson | Warning — checked by the collection-level validator (cross-file) |
 | Variant-specific rules | See [Front Variants — Validation Rules](#validation-rules-additional) |
 
 ### Strict Mode (`--strict`)
